@@ -8,17 +8,25 @@ import (
 )
 
 type Global struct {
-	fabrics   map[string]*Fabric
-	vlans     map[int]*Vlan
-	vlanIndex *VlanIndex
+	fabrics     map[string]*Fabric
+	vlans       map[int]*Vlan
+	vlanIndex   *VlanIndex
+	bdIndex     *BridgeDomainIndex
+	routerIndex *RouterIndex
 }
 
 func NewGlobal() *Global {
-	return &Global{
-		fabrics:   map[string]*Fabric{},
-		vlans:     map[int]*Vlan{},
-		vlanIndex: NewVlanIndex(),
+
+	g := &Global{
+		fabrics:     map[string]*Fabric{},
+		vlans:       map[int]*Vlan{},
+		vlanIndex:   NewVlanIndex(),
+		bdIndex:     NewBridgeDomainIndex(),
+		routerIndex: NewRouterIndex(),
 	}
+
+	g.NewFabric("Default")
+	return g
 }
 
 func (g *Global) NewFabric(name string) *Fabric {
@@ -29,6 +37,10 @@ func (g *Global) NewFabric(name string) *Fabric {
 
 func (g *Global) GetVlanIndex() *VlanIndex {
 	return g.vlanIndex
+}
+
+func (g *Global) GetBridgeDomainIndex() *BridgeDomainIndex {
+	return g.bdIndex
 }
 
 func (g *Global) AddFabric(fab *Fabric) {
@@ -42,8 +54,8 @@ func (g *Global) String(indent int) string {
 	for _, v := range g.vlans {
 		result = result + fmt.Sprintf("%s+ VLAN: %s\n", white, v.Identifier())
 	}
-	for _, v := range g.fabrics {
-		result = result + v.String(indent+PerLevelIndent)
+	for _, f := range g.fabrics {
+		result = result + f.String(indent+PerLevelIndent)
 	}
 	return result
 }
@@ -105,4 +117,98 @@ func (g *Global) AssignVlan(fabric, router, interf string, scope Scope, vlanId i
 		}
 		return fab.AssignVlan(router, interf, scope, vlanId)
 	}
+}
+
+func (g *Global) AssignVlanBD(bdname string, vlanId int) (string, error) {
+	var bd *BridgeDomain
+	if bd = g.bdIndex.GetBridgeDomain(bdname); bd == nil {
+		bd = NewBridgeDomain(bdname, g.vlanIndex)
+		err := g.bdIndex.AddBridgeDomain(bd)
+		if err != nil {
+			return "", err
+		}
+	}
+	vlan, err := bd.AssignVlan(vlanId)
+	if err != nil {
+		return "", err
+	}
+	return vlan.Identifier(), nil
+}
+
+func (g *Global) AssignInterfaceToBD(router, ifname, bridgedomain string) error {
+	// Get router from index
+	r := g.routerIndex.GetRouter(router)
+	// if router does not exist create it
+	if r == nil {
+		r = g.fabrics["Default"].NewRouter(router)
+		// add new router to index
+		err := g.routerIndex.AddRouter(r)
+		if err != nil {
+			return err
+		}
+	}
+	// try get interface from router
+	interf := r.GetInterface(ifname)
+	if interf == nil {
+		// if interface does not exist, create it
+		interf = r.AddInterface(ifname)
+	}
+
+	// get the bridgedomain
+	bd := g.bdIndex.GetBridgeDomain(bridgedomain)
+	if bd == nil {
+		// if it does not exist, create it
+		bd = NewBridgeDomain(bridgedomain, g.vlanIndex)
+		// add bridgedomain to index
+		err := g.bdIndex.AddBridgeDomain(bd)
+		if err != nil {
+			return err
+		}
+	}
+	// finally add the interface to the bridgedomain
+	return bd.AddInterface(interf)
+}
+
+func (g *Global) AssignRouterToBD(router, bridgedomain string) error {
+	// Get router from index
+	r := g.routerIndex.GetRouter(router)
+	// if router does not exist create it
+	if r == nil {
+		// TODO: For now we just take the "Default" Fabric
+		r = g.fabrics["Default"].NewRouter(router)
+		// add new router to index
+		err := g.routerIndex.AddRouter(r)
+		if err != nil {
+			return err
+		}
+	}
+
+	// get the bridgedomain
+	bd := g.bdIndex.GetBridgeDomain(bridgedomain)
+	if bd == nil {
+		// if it does not exist, create it
+		bd = NewBridgeDomain(bridgedomain, g.vlanIndex)
+		// add bridgedomain to index
+		err := g.bdIndex.AddBridgeDomain(bd)
+		if err != nil {
+			return err
+		}
+	}
+	// finally add the router to the bridgedomain
+	return bd.AddRouter(r)
+}
+
+func (g *Global) GetFreeBDVlan(bdname string) (*Vlan, error) {
+	// get the bridgedomain
+	bd := g.bdIndex.GetBridgeDomain(bdname)
+	if bd == nil {
+		// if it does not exist, create it
+		bd = NewBridgeDomain(bdname, g.vlanIndex)
+		// add bridgedomain to index
+		err := g.bdIndex.AddBridgeDomain(bd)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return bd.GetFreeVlan()
 }

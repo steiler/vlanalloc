@@ -31,3 +31,8 @@ func (v *Vlan) String(indent int) string {
 	result := fmt.Sprintf("%sVlanId: %d, VlanIdentifier: %s\n", white, v.id, v.Identifier())
 	return result
 }
+
+func (v *Vlan) StringOneLine(indent int) string {
+	white := GetWhitespaces(indent)
+	return fmt.Sprintf("%sVlan: %s", white, v.Identifier())
+}

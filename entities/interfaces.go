@@ -8,9 +8,10 @@ import (
 )
 
 type Interf struct {
-	name   string
-	router *Router
-	vlans  map[int]*Vlan
+	name         string
+	router       *Router
+	vlans        map[int]*Vlan // vlans indexed by their vlan id
+	bridgeDomain *BridgeDomain // bridgedomains indexed by their name
 }
 
 func NewInterf(name string, router *Router) *Interf {
@@ -32,9 +33,13 @@ func (i *Interf) Identifier() string {
 func (i *Interf) String(indent int) string {
 	white := GetWhitespaces(indent)
 	result := fmt.Sprintf("%sInterface: %s\n", white, i.name)
+	if i.bridgeDomain != nil {
+		result = result + GetWhitespaces(indent+PerLevelIndent) + "*" + i.bridgeDomain.StringOneLine(0) + "\n"
+	}
 	for _, v := range i.vlans {
 		result = result + fmt.Sprintf("%s+ VLAN: %s\n", white, v.Identifier())
 	}
+
 	return result
 }
 
@@ -51,6 +56,9 @@ func (i *Interf) GetAssignedVlanIDsUp(vlanMap map[int]struct{}) {
 func (i *Interf) GetAssignedVlanIDsDown(vlanMap map[int]struct{}) {
 	for k, _ := range i.vlans {
 		vlanMap[k] = struct{}{}
+	}
+	if i.bridgeDomain != nil {
+		i.bridgeDomain.GetAssignedVlanIDs(vlanMap)
 	}
 }
 
@@ -91,4 +99,21 @@ func (i *Interf) GenerateVlanIdentifier(v *Vlan) string {
 
 func (i *Interf) Scope() Scope {
 	return Scope_Interface
+}
+
+// StringOneLine returns a string representation of the entity without a trailing newline
+func (i *Interf) StringOneLine(indent int) string {
+	white := GetWhitespaces(indent)
+	return fmt.Sprintf("%sInterface: %s:%s", white, i.router.name, i.name)
+}
+
+// GetAssignedVlans use x to provide the result struct
+func (i *Interf) GetAssignedVlans(x map[int]struct{}) {
+	i.GetAssignedVlanIDsDown(x)
+	i.GetAssignedVlanIDsUp(x)
+}
+
+func (i *Interf) _setBridgeDomain(bd *BridgeDomain) error {
+	i.bridgeDomain = bd
+	return nil
 }

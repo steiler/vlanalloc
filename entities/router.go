@@ -8,10 +8,11 @@ import (
 )
 
 type Router struct {
-	name      string
-	interfces map[string]*Interf
-	fabric    *Fabric
-	vlans     map[int]*Vlan
+	name         string             // the identifying name of this router
+	fabric       *Fabric            // the fabric this router belongs to
+	interfces    map[string]*Interf // interfaces indexed by their name
+	vlans        map[int]*Vlan      // vlans indexed by the Vlan ID
+	bridgeDomain *BridgeDomain      // bridgedomains indexed by their name
 }
 
 func NewRouter(name string, fabric *Fabric) *Router {
@@ -23,10 +24,20 @@ func NewRouter(name string, fabric *Fabric) *Router {
 	}
 }
 
+func (r *Router) _addBridgeDomain(bd *BridgeDomain) error {
+	r.bridgeDomain = bd
+	return nil
+}
+
 func (r *Router) AddInterface(ifname string) *Interf {
+	// TODO: Add error in case of existence
 	i := NewInterf(ifname, r)
 	r.interfces[i.Name()] = i
 	return i
+}
+
+func (r *Router) GetInterface(name string) *Interf {
+	return r.interfces[name]
 }
 
 func (r *Router) Identifier() string {
@@ -36,6 +47,9 @@ func (r *Router) Identifier() string {
 func (r *Router) String(indent int) string {
 	white := GetWhitespaces(indent)
 	result := fmt.Sprintf("%sRouter: %s\n", white, r.name)
+	if r.bridgeDomain != nil {
+		result = result + GetWhitespaces(indent+PerLevelIndent) + "*" + r.bridgeDomain.StringOneLine(0) + "\n"
+	}
 	for _, v := range r.vlans {
 		result = result + fmt.Sprintf("%s+ VLAN: %s\n", white, v.Identifier())
 	}
@@ -64,6 +78,10 @@ func (r *Router) GetAssignedVlanIDsDown(vlanMap map[int]struct{}) {
 	for _, v := range r.interfces {
 		v.GetAssignedVlanIDsDown(vlanMap)
 	}
+	// add the bridgedomain vlans
+	if r.bridgeDomain != nil {
+		r.bridgeDomain.GetAssignedVlanIDs(vlanMap)
+	}
 }
 
 // GetVlanIndex returns the reference to the overall VLAN Index
@@ -73,6 +91,12 @@ func (r *Router) GetVlanIndex() *VlanIndex {
 
 func (r *Router) GenerateVlanIdentifier(v *Vlan) string {
 	return fmt.Sprintf("%s%s%d", r.Identifier(), IdentifierSep, v.id)
+}
+
+// GetAssignedVlans use x to provide the result struct
+func (r *Router) GetAssignedVlans(x map[int]struct{}) {
+	r.GetAssignedVlanIDsDown(x)
+	r.GetAssignedVlanIDsUp(x)
 }
 
 func (r *Router) AssignVlan(interf string, scope Scope, vlanId int) (string, error) {
@@ -104,4 +128,10 @@ func (r *Router) AssignVlan(interf string, scope Scope, vlanId int) (string, err
 
 func (r *Router) Scope() Scope {
 	return Scope_Router
+}
+
+// StringOneLine returns a string representation of the entity without a trailing newline
+func (r *Router) StringOneLine(indent int) string {
+	white := GetWhitespaces(indent)
+	return fmt.Sprintf("%sRouter: %s", white, r.name)
 }

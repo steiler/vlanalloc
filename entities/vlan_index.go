@@ -12,10 +12,10 @@ func NewVlanIndex() *VlanIndex {
 	}
 }
 
-func (vi *VlanIndex) String() string {
+func (vi *VlanIndex) String(indent int) string {
 	result := ""
 	for _, v := range vi.vlans {
-		result = result + fmt.Sprintf("%s", v.String(0))
+		result = result + fmt.Sprintf("%s", v.String(indent))
 	}
 
 	return result
